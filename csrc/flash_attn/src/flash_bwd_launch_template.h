@@ -64,11 +64,12 @@ void run_flash_bwd_seqk_parallel(Flash_bwd_params &params, cudaStream_t stream, 
     const bool is_attn_mask = params.attn_mask_ptr != nullptr;
     const bool is_deterministic = params.num_splits == 1;
     // printf("smem_size_dq_dk_dv = %d\n", smem_size_dq_dk_dv);
+    params.attn_mask_start_row = (int)(params.attn_mask_start_row / Kernel_traits::kBlockM) * Kernel_traits::kBlockM;
     BOOL_SWITCH(params.is_causal, IsCausalConst, [&] {
         BOOL_SWITCH(is_even_MN, IsEvenMNConst, [&] {
             BOOL_SWITCH(is_even_K, IsEvenKConst, [&] {
-                BOOL_SWITCH(is_attn_mask, Is_attn_mask, [&] {
-                    BOOL_SWITCH(is_deterministic, Is_deterministic, [&] {
+                BOOL_SWITCH_ADVANCED(is_attn_mask, Is_attn_mask, [&] {
+                    BOOL_SWITCH_ADVANCED(is_deterministic, Is_deterministic, [&] {
                         auto kernel = &flash_bwd_dq_dk_dv_loop_seqk_parallel_kernel<Kernel_traits, Is_dropout, IsCausalConst, IsEvenMNConst, IsEvenKConst, Is_attn_mask && !IsCausalConst, Is_deterministic>;
                         // auto kernel = &flash_bwd_dq_dk_dv_loop_seqk_parallel_kernel<Kernel_traits, Is_dropout, IsCausalConst, IsEvenMNConst, true>;
                         if (smem_size_dq_dk_dv >= 48 * 1024)  {

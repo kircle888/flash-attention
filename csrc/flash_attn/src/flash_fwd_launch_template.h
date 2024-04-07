@@ -36,10 +36,11 @@ void run_flash_fwd(Flash_fwd_params &params, cudaStream_t stream) {
     const bool return_softmax = params.p_ptr != nullptr;
     const bool is_attn_mask = params.attn_mask_ptr != nullptr;
     const bool is_equal_qk = (params.cu_seqlens_q == nullptr) && (params.cu_seqlens_k == nullptr) && (params.seqlen_q == params.seqlen_k) && (Is_causal) && (!is_attn_mask);
+    params.attn_mask_start_row = (int)(params.attn_mask_start_row / Kernel_traits::kBlockM) * Kernel_traits::kBlockM;
     BOOL_SWITCH(is_even_N, IsEvenNConst, [&] {
         BOOL_SWITCH(is_even_K, IsEvenKConst, [&] {
             BOOL_SWITCH(return_softmax, ReturnSoftmaxConst, [&] {
-                BOOL_SWITCH(is_attn_mask, Is_attn_mask, [&] {
+                BOOL_SWITCH_ADVANCED(is_attn_mask, Is_attn_mask, [&] {
                     BOOL_SWITCH(is_equal_qk, Is_equal_seq_qk, [&] {
                         // Will only return softmax if dropout, to reduce compilation time.
                         auto kernel = &flash_fwd_kernel<Kernel_traits, Is_dropout, Is_causal, IsEvenNConst, IsEvenKConst, ReturnSoftmaxConst && Is_dropout, Is_attn_mask && !Is_causal, Is_equal_seq_qk>;
