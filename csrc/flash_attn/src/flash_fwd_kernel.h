@@ -181,6 +181,8 @@ inline __device__ void compute_attn_1rowblock(const Params &params, const int bi
         + (n_block_max - 1) * kBlockN;
 
     const index_t row_offset_sparse_mask = (bidb * params.mask_head_mod_size + bidh % params.mask_head_mod_size) * params.seqlen_k + (n_block_max - 1) * kBlockN;
+    const index_t row_offset_sparsemask_nblock =
+        (bidb * params.h + bidh) * cute::ceil_div(params.seqlen_k, kBlockN);
 
     Tensor gQ = make_tensor(make_gmem_ptr(reinterpret_cast<Element *>(params.q_ptr) + row_offset_q),
                             Shape<Int<kBlockM>, Int<kHeadDim>>{},
@@ -201,6 +203,8 @@ inline __device__ void compute_attn_1rowblock(const Params &params, const int bi
 
     Tensor gSparseMask = make_tensor(make_gmem_ptr(reinterpret_cast<int32_t *>(params.attn_mask_start_row_indices_ptr) + row_offset_sparse_mask),
                                Shape<Int<kBlockN>>{});
+    const int* gSparseMaskDownMax = reinterpret_cast<int32_t*>(params.attn_sparsemask_down_nblockmax)+row_offset_sparsemask_nblock;
+    const int* gSparseMaskDownMin = reinterpret_cast<int32_t*>(params.attn_sparsemask_down_nblockmin)+row_offset_sparsemask_nblock;
 
     Tensor sQ = make_tensor(make_smem_ptr(reinterpret_cast<Element *>(smem_)),
                             typename Kernel_traits::SmemLayoutQ{});
@@ -416,7 +420,7 @@ inline __device__ void compute_attn_1rowblock(const Params &params, const int bi
             // Idk why it's get<1> and not get<0> of the stride.
             // if (cute::thread0()) { print(idx_row.layout()); print(stride<1>(idx_row)); printf("stride = %d \n", get<1>(stride<1>(idx_row))); }
             // I can't get the stride from idx_row
-            if (Is_sparse_attn_mask && m_block * kBlockM >= attn_mask_start_row) {
+            if (Is_sparse_attn_mask && m_block * kBlockM >= gSparseMaskDownMin[n_block]) {
 	            if (tidx < kBlockN) {
                     sSparseMask(tidx) = gSparseMask(tidx);
                 }
@@ -489,6 +493,9 @@ inline __device__ void compute_attn_1rowblock(const Params &params, const int bi
 
     // These are the iterations where we don't need masking on S
     for (; n_block >= 0; --n_block) {
+        if (Is_sparse_attn_mask && m_block * kBlockM >= gSparseMaskDownMax[n_block]) {
+            continue;
+        }
         Tensor acc_s = partition_fragment_C(tiled_mma, Shape<Int<kBlockM>, Int<kBlockN>>{});  // (MMA=4, MMA_M, MMA_N)
         clear(acc_s);
         flash::cp_async_wait<0>();
@@ -524,7 +531,7 @@ inline __device__ void compute_attn_1rowblock(const Params &params, const int bi
                                                             params.unscale_softmax);
             tPgMask.data() = tPgMask.data() + (-kBlockN);
         }
-        if (Is_causal && Is_sparse_attn_mask && m_block * kBlockM >= params.attn_mask_start_row) {
+        if (Is_causal && Is_sparse_attn_mask && (m_block + 1) * kBlockM >= gSparseMaskDownMin(n_block)) {
 	        if (tidx < kBlockN) {
                 sSparseMask(tidx) = gSparseMask(tidx);
             }

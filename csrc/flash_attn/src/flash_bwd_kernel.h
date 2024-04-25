@@ -428,7 +428,7 @@ template<typename Kernel_traits, bool Is_dropout, bool Is_causal, bool Is_even_M
 inline __device__ void compute_dq_dk_dv_1colblock(const Params &params, const int bidb, const int bidh, const int n_block) {
 
     const bool Is_sparse_attn_mask = params.attn_mask_start_row_indices_ptr != nullptr;
-    const int attn_mask_start_row = params.attn_mask_start_row;
+    int attn_mask_start_row = params.attn_mask_start_row;
 
     using Element = typename Kernel_traits::Element;
     using ElementAccum = typename Kernel_traits::ElementAccum;
@@ -457,7 +457,16 @@ inline __device__ void compute_dq_dk_dv_1colblock(const Params &params, const in
     const int m_residue = params.seqlen_q % kBlockM ? params.seqlen_q % kBlockM : kBlockM;
     const int n_residue = params.seqlen_k % kBlockN ? params.seqlen_k % kBlockN : kBlockN;
 
-    const int m_block_max = cute::ceil_div(binfo.actual_seqlen_q, kBlockM);
+    const index_t row_offset_sparsemask_nblock =
+        (bidb * params.h + bidh) * cute::ceil_div(params.seqlen_k, kBlockN);
+    const int* gSparseMaskDownMax = reinterpret_cast<int32_t*>(params.attn_sparsemask_down_nblockmax)+row_offset_sparsemask_nblock;
+    const int* gSparseMaskDownMin = reinterpret_cast<int32_t*>(params.attn_sparsemask_down_nblockmin)+row_offset_sparsemask_nblock;
+
+    int m_block_max = cute::ceil_div(binfo.actual_seqlen_q, kBlockM);
+    if (Is_sparse_attn_mask) {
+      mblock_max = min(m_block_max, gSparseMaskDownMax[n_block]);
+      attn_mask_start_row = gSparseMaskDownMin[n_block];
+    }
     const int n_block_max = cute::ceil_div(binfo.actual_seqlen_k, kBlockN);
 
     const index_t row_offset_q = binfo.q_offset(params.q_batch_stride, params.q_row_stride, bidb)
@@ -866,7 +875,7 @@ inline __device__ void compute_dq_dk_dv_1colblock(const Params &params, const in
             // (e.g., 256 and 2), the 2nd block of seqlen_q (from 128 to 255), we're not doing causal masking.
             // But we still want to mask out elements not beyond actual_seqlen_k.
 
-            if (Is_sparse_attn_mask && m_block * kBlockM >= attn_mask_start_row) {
+            if (Is_sparse_attn_mask && (m_block+1) * kBlockM >= attn_mask_start_row) {
                 flash::apply_sparse_mask_causal(scores, sSparseMask, n_block * kBlockN + (tidx / 32 / AtomLayoutMS) * MMA_N_SdP * 16, binfo.actual_seqlen_k,
                                          m_block * kBlockM + get<0>(taccScS_row(0)),
                                          AtomLayoutMS * 16, n_block * kBlockN);
