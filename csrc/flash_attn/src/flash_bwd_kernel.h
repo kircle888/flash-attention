@@ -464,7 +464,7 @@ inline __device__ void compute_dq_dk_dv_1colblock(const Params &params, const in
 
     int m_block_max = cute::ceil_div(binfo.actual_seqlen_q, kBlockM);
     if (Is_sparse_attn_mask) {
-      mblock_max = min(m_block_max, gSparseMaskDownMax[n_block]);
+      m_block_max = min(m_block_max, gSparseMaskDownMax[n_block]);
       attn_mask_start_row = gSparseMaskDownMin[n_block];
     }
     const int n_block_max = cute::ceil_div(binfo.actual_seqlen_k, kBlockN);

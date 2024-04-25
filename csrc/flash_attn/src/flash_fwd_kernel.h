@@ -420,7 +420,7 @@ inline __device__ void compute_attn_1rowblock(const Params &params, const int bi
             // Idk why it's get<1> and not get<0> of the stride.
             // if (cute::thread0()) { print(idx_row.layout()); print(stride<1>(idx_row)); printf("stride = %d \n", get<1>(stride<1>(idx_row))); }
             // I can't get the stride from idx_row
-            if (Is_sparse_attn_mask && m_block * kBlockM >= gSparseMaskDownMin[n_block]) {
+            if (Is_sparse_attn_mask && m_block * kBlockM >= attn_mask_start_row) {
 	            if (tidx < kBlockN) {
                     sSparseMask(tidx) = gSparseMask(tidx);
                 }
@@ -531,7 +531,7 @@ inline __device__ void compute_attn_1rowblock(const Params &params, const int bi
                                                             params.unscale_softmax);
             tPgMask.data() = tPgMask.data() + (-kBlockN);
         }
-        if (Is_causal && Is_sparse_attn_mask && (m_block + 1) * kBlockM >= gSparseMaskDownMin(n_block)) {
+        if (Is_causal && Is_sparse_attn_mask && m_block * kBlockM >= attn_mask_start_row) {
 	        if (tidx < kBlockN) {
                 sSparseMask(tidx) = gSparseMask(tidx);
             }
