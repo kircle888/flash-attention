@@ -54,10 +54,27 @@ void scanMaxMinGpu(
   scanMaxMinKernel<N><<<grid, block, 0, stream>>>(input, b, n, maxo, mino);
 }
 
+inline void debugPrint(int *arr, int row, int col) {
+  if (row * col > 4096) {
+    printf("Skip Debug Large\n");
+    return;
+  }
+  printf("Print Matrix\n");
+  int *arr_host = new int[row * col];
+  cudaDeviceSynchronize();
+  cudaMemcpy(arr_host, arr, sizeof(int) * row * col, cudaMemcpyDeviceToHost);
+  for (int i = 0; i < row; ++i) {
+    for (int j = 0; j < col; ++j) printf("%d ", arr_host[i * col + j]);
+    printf("\n");
+  }
+  printf("End\n");
+  delete[] arr_host;
+}
+
 template <typename Kernel_traits>
 int *prepare_sparsemask(Flash_fwd_params &params, cudaStream_t stream) {
-  if (params.attn_mask_start_row_indices == nullptr &&
-      params.attn_mask_end_row_indices == nullptr) {
+  if (params.attn_mask_start_row_indices_ptr == nullptr &&
+      params.attn_mask_end_row_indices_ptr == nullptr) {
     params.attn_sparsemask_down_nblockmax = nullptr;
     params.attn_sparsemask_down_nblockmin = nullptr;
     params.attn_sparsemask_up_nblockmax = nullptr;
@@ -73,25 +90,34 @@ int *prepare_sparsemask(Flash_fwd_params &params, cudaStream_t stream) {
   params.attn_sparsemask_down_nblockmin = nblock_smask + nblock_masklen;
   params.attn_sparsemask_up_nblockmax = nblock_smask + 2 * nblock_masklen;
   params.attn_sparsemask_up_nblockmin = nblock_smask + 3 * nblock_masklen;
-  params.attn_mask_end_row_indices = nullptr;  // TODO: up mask not enable now
-  if (params.attn_mask_start_row_indices != nullptr) {
-    scanMaxMinGpu<kBlockN>(params.attn_mask_start_row_indices,
-                           params.b * params.h,
-                           nblock_seqlen,
-                           params.attn_sparsemask_down_nblockmax,
-                           params.attn_sparsemask_down_nblockmin,
-                           stream);
+  params.attn_mask_end_row_indices_ptr =
+      nullptr;  // TODO: up mask not enable now
+  if (params.attn_mask_start_row_indices_ptr != nullptr) {
+    scanMaxMinGpu<kBlockN>(
+        static_cast<const int *>(params.attn_mask_start_row_indices_ptr),
+        params.b * params.h,
+        params.seqlen_k,
+        params.attn_sparsemask_down_nblockmax,
+        params.attn_sparsemask_down_nblockmin,
+        stream);
+    // debugPrint(params.attn_sparsemask_down_nblockmax,
+    //            params.b * params.h,
+    //            nblock_seqlen);
+    // debugPrint(params.attn_sparsemask_down_nblockmin,
+    //            params.b * params.h,
+    //            nblock_seqlen);
   } else {
     params.attn_sparsemask_down_nblockmax = nullptr;
     params.attn_sparsemask_down_nblockmin = nullptr;
   }
-  if (params.attn_mask_end_row_indices != nullptr) {
-    scanMaxMinGpu<kBlockN>(params.attn_mask_end_row_indices,
-                           params.b * params.h,
-                           nblock_seqlen,
-                           params.attn_sparsemask_up_nblockmax,
-                           params.attn_sparsemask_up_nblockmin,
-                           stream);
+  if (params.attn_mask_end_row_indices_ptr != nullptr) {
+    scanMaxMinGpu<kBlockN>(
+        static_cast<const int *>(params.attn_mask_end_row_indices_ptr),
+        params.b * params.h,
+        params.seqlen_k,
+        params.attn_sparsemask_up_nblockmax,
+        params.attn_sparsemask_up_nblockmin,
+        stream);
   } else {
     params.attn_sparsemask_up_nblockmax = nullptr;
     params.attn_sparsemask_up_nblockmin = nullptr;
