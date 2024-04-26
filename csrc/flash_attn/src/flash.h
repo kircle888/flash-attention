@@ -116,6 +116,8 @@ struct Flash_fwd_params : public Qkv_params {
     int *__restrict__ attn_sparsemask_down_nblockmax = nullptr;
     int *__restrict__ attn_sparsemask_down_nblockmin = nullptr;
     int attn_mask_start_row;
+    int h_sparsemask;
+    int h_h_sparsemask_ratio;
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////

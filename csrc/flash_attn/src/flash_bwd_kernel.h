@@ -458,14 +458,14 @@ inline __device__ void compute_dq_dk_dv_1colblock(const Params &params, const in
     const int n_residue = params.seqlen_k % kBlockN ? params.seqlen_k % kBlockN : kBlockN;
 
     const index_t row_offset_sparsemask_nblock =
-        (bidb * params.h + bidh) * cute::ceil_div(params.seqlen_k, kBlockN);
+        (bidb * params.h_sparsemask + bidh / params.h_h_sparsemask_ratio) * cute::ceil_div(params.seqlen_k, kBlockN);
     const int* gSparseMaskDownMax = reinterpret_cast<int32_t*>(params.attn_sparsemask_down_nblockmax)+row_offset_sparsemask_nblock;
     const int* gSparseMaskDownMin = reinterpret_cast<int32_t*>(params.attn_sparsemask_down_nblockmin)+row_offset_sparsemask_nblock;
 
     int m_block_max = cute::ceil_div(binfo.actual_seqlen_q, kBlockM);
     if (Is_sparse_attn_mask) {
       m_block_max = min(m_block_max, cute::ceil_div(gSparseMaskDownMax[n_block],kBlockM));
-    //   attn_mask_start_row = gSparseMaskDownMin[n_block];
+      attn_mask_start_row = gSparseMaskDownMin[n_block];
     }
     const int n_block_max = cute::ceil_div(binfo.actual_seqlen_k, kBlockN);
 
@@ -493,7 +493,7 @@ inline __device__ void compute_dq_dk_dv_1colblock(const Params &params, const in
         + ((m_block_max - 1) * kBlockM % params.mask_seq_q_mod_size)) * params.seqlen_k
         + n_block * kBlockN;
 
-    const index_t row_offset_sparse_mask = (bidb * params.mask_head_mod_size + bidh % params.mask_head_mod_size) * params.seqlen_k + n_block * kBlockN;
+    const index_t row_offset_sparse_mask = (bidb * params.h_sparsemask + bidh / params.h_h_sparsemask_ratio) * params.seqlen_k + n_block * kBlockN;
 
     Tensor gQ = make_tensor(make_gmem_ptr(reinterpret_cast<Element *>(params.q_ptr) + row_offset_q),
                             Shape<Int<kBlockM>, Int<kHeadDim>>{},

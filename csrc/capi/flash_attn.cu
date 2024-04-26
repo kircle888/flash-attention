@@ -189,6 +189,10 @@ void set_params_fprop_strided(Flash_fwd_params &params,
     params.attn_mask_start_row_indices_ptr = attn_mask_start_row_indices;
     params.attn_mask_end_row_indices_ptr = attn_mask_end_row_indices;
     params.attn_mask_start_row = attn_mask_start_row;
+    if(attn_mask_start_row_indices!=nullptr||attn_mask_end_row_indices!=nullptr) {
+        params.h_sparsemask = mask_head_mod_size;
+        params.h_h_sparsemask_ratio = h / mask_head_mod_size;
+    }
 
     // Set the different scale values.
     params.scale_softmax = softmax_scale;
