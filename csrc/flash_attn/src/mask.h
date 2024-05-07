@@ -73,8 +73,6 @@ int *prepare_sparsemask(Flash_fwd_params &params, cudaStream_t stream) {
   params.attn_sparsemask_down_nblockmin = nblock_smask + nblock_masklen;
   params.attn_sparsemask_up_nblockmax = nblock_smask + 2 * nblock_masklen;
   params.attn_sparsemask_up_nblockmin = nblock_smask + 3 * nblock_masklen;
-  params.attn_mask_end_row_indices_ptr =
-      nullptr;  // TODO: up mask not enable now, will be ignored
   if (params.attn_mask_start_row_indices_ptr != nullptr) {
     scanMaxMinGpu<kBlockN>(
         static_cast<const int *>(params.attn_mask_start_row_indices_ptr),
