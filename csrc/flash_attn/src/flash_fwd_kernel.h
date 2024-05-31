@@ -370,7 +370,12 @@ inline __device__ void compute_attn_1rowblock(const Params &params, const int bi
     // We need masking on S for the very last block when K and V has length not multiple of kBlockN.
     // We also need masking on S if it's causal, for the last ceil_div(kBlockM, kBlockN) blocks.
     // We will have at least 1 "masking" iteration.
-
+#define SPARSE_MASKED_DOWN(N_BLOCK) \
+    ((m_block * kBlockM) >= gSparseMaskDownMax[(N_BLOCK)])
+#define SPARSE_MASKED_UP(N_BLOCK) \
+    (!Is_causal && (m_block + 1) * kBlockM < gSparseMaskUpMin[(N_BLOCK)])
+#define SPARSE_MASKED(N_BLOCK) \
+    (SPARSE_MASKED_DOWN(N_BLOCK) || SPARSE_MASKED_UP(N_BLOCK))
     constexpr int n_masking_steps = Is_causal ? cute::ceil_div(kBlockM, kBlockN) : 1;
     #pragma unroll
     for (int masking_step = 0; masking_step < n_masking_steps; ++masking_step, --n_block) {
@@ -471,6 +476,14 @@ inline __device__ void compute_attn_1rowblock(const Params &params, const int bi
         if (n_block > 0) {
             // Advance gK
             tKgK.data() = tKgK.data() + (-int(kBlockN * params.k_row_stride));
+            if (Is_sparse_attn_mask && masking_step == n_masking_steps - 1) {
+              auto in_block = n_block - 1;
+              for (; in_block > 0 && SPARSE_MASKED(in_block); --in_block) {
+                tKgK.data() =
+                    tKgK.data() + (-int(kBlockN * params.k_row_stride));
+              }
+              __syncwarp();
+            }
             flash::copy</*Is_even_MN=*/true, Is_even_K>(gmem_tiled_copy_QKV, tKgK, tKsK, tKVcKV, tKVpKV);
             // This cp_async_fence needs to be in the if block, otherwise the synchronization
             // isn't right and we get race conditions.
@@ -521,12 +534,6 @@ inline __device__ void compute_attn_1rowblock(const Params &params, const int bi
         }
     }
 
-#define SPARSE_MASKED_DOWN(N_BLOCK) \
-    ((m_block * kBlockM) >= gSparseMaskDownMax[(N_BLOCK)])
-#define SPARSE_MASKED_UP(N_BLOCK) \
-    (!Is_causal && (m_block + 1) * kBlockM < gSparseMaskUpMin[(N_BLOCK)])
-#define SPARSE_MASKED(N_BLOCK) \
-    (SPARSE_MASKED_DOWN(N_BLOCK) || SPARSE_MASKED_UP(N_BLOCK))
     // These are the iterations where we don't need masking on S
     for (; n_block >= 0; --n_block) {
         if (Is_sparse_attn_mask && SPARSE_MASKED(n_block)) {
