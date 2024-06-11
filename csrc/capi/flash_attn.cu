@@ -131,7 +131,8 @@ void set_params_fprop_strided(Flash_fwd_params &params,
                       void * attn_mask_end_row_indices = nullptr,
                       const int attn_mask_start_row = 0,
                       int mask_head_mod_size = 0,
-                      int mask_seq_q_mod_size = 0) {
+                      int mask_seq_q_mod_size = 0,
+                      bool enable_mask_bypass = false) {
     // Reset the parameters
     memset(&params, 0, sizeof(params));
 
@@ -189,6 +190,7 @@ void set_params_fprop_strided(Flash_fwd_params &params,
     params.attn_mask_start_row_indices_ptr = attn_mask_start_row_indices;
     params.attn_mask_end_row_indices_ptr = attn_mask_end_row_indices;
     params.attn_mask_start_row = attn_mask_start_row;
+    params.enable_mask_bypass = enable_mask_bypass;
     if(attn_mask_start_row_indices!=nullptr||attn_mask_end_row_indices!=nullptr) {
         params.h_sparsemask = mask_head_mod_size;
         params.h_h_sparsemask_ratio = h / mask_head_mod_size;
@@ -468,7 +470,8 @@ void set_params_dgrad_strided(Flash_bwd_params &params,
                       void * attn_mask_end_row_indices = nullptr,
                       const int attn_mask_start_row = 0,
                       int mask_head_mod_size = 0,
-                      int mask_seq_q_mod_size = 0) {
+                      int mask_seq_q_mod_size = 0,
+                      bool enable_mask_bypass = false) {
 
     set_params_fprop_strided(params,
                      b, seqlen_q, seqlen_k, seqlen_q_rounded, seqlen_k_rounded, h, h_k, d, d_rounded,
@@ -492,7 +495,8 @@ void set_params_dgrad_strided(Flash_bwd_params &params,
                      attn_mask_end_row_indices,
                      attn_mask_start_row,
                      mask_head_mod_size,
-                     mask_seq_q_mod_size);
+                     mask_seq_q_mod_size,
+                     enable_mask_bypass);
 
     // Set the pointers and strides.
     params.do_ptr = dout;
@@ -623,7 +627,8 @@ bool flash_attn_fwd(const void * const q,
                      const_cast<void *>(attn_mask_end_row_indices),
                      attn_mask_start_row,
                      mask_head_mod_size,
-                     mask_seq_q_mod_size);
+                     mask_seq_q_mod_size,
+                     attn_mask_start_row == 0);
 
     params.rng_state = static_cast<uint64_t*>(rng_state);
 
@@ -727,7 +732,8 @@ bool flash_attn_varlen_fwd(const void * const q,
                      nullptr,
                      -1,
                      mask_head_mod_size,
-                     mask_seq_q_mod_size
+                     mask_seq_q_mod_size,
+                     false/*enable_mask_bypass*/
                     );
     
     params.rng_state = static_cast<uint64_t*>(rng_state);
@@ -895,7 +901,8 @@ bool flash_attn_bwd(const void * const dout,
                     const_cast<void *>(attn_mask_end_row_indices),
                      attn_mask_start_row,
                      mask_head_mod_size,
-                     mask_seq_q_mod_size);
+                     mask_seq_q_mod_size,
+                     attn_mask_start_row == 0);
 
     auto launch = &run_mha_bwd;
     
@@ -1042,7 +1049,8 @@ bool flash_attn_varlen_bwd(const void * const dout,
                      nullptr,
                      -1,
                      mask_head_mod_size,
-                     mask_seq_q_mod_size);
+                     mask_seq_q_mod_size,
+                     false);
 
     auto launch = &run_mha_bwd;
 

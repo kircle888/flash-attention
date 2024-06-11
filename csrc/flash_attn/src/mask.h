@@ -56,6 +56,9 @@ void scanMaxMinGpu(
 
 template <typename Kernel_traits>
 int *prepare_sparsemask(Flash_fwd_params &params, cudaStream_t stream) {
+  if (!params.enable_mask_bypass) {
+    return nullptr;
+  }
   if (params.attn_mask_start_row_indices_ptr == nullptr &&
       params.attn_mask_end_row_indices_ptr == nullptr) {
     params.attn_sparsemask_down_nblockmax = nullptr;

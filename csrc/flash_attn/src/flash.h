@@ -118,6 +118,7 @@ struct Flash_fwd_params : public Qkv_params {
     int attn_mask_start_row;
     int h_sparsemask;
     int h_h_sparsemask_ratio;
+    bool enable_mask_bypass;
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
