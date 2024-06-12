@@ -419,10 +419,9 @@ inline __device__ void compute_attn_1rowblock(const Params &params, const int bi
         // for rows outside actual_seqlen_k. So those rows could have Inf / NaN, and the matmul
         // can produce Inf / NaN.
         if (!Is_causal) {
-          if (Is_sparse_attn_mask) {
-            if (!enable_mask_bypass ||
+          if (Is_sparse_attn_mask && (!enable_mask_bypass ||
                 (m_block + 1) * kBlockM >= gSparseMaskDownMin[n_block] ||
-                m_block * kBlockM < gSparseMaskUpMax[n_block]) {
+                m_block * kBlockM < gSparseMaskUpMax[n_block])) {
               if (tidx < kBlockN) {
                 sSparseMask(tidx) = gSparseMask(tidx);
                 sSparseMaskUp(tidx) = gSparseMaskUp(tidx);
@@ -440,7 +439,6 @@ inline __device__ void compute_attn_1rowblock(const Params &params, const int bi
                   n_block * kBlockN);
               // m_block * kBlockM + (tidx / 32) * 16, kNWarps * 16);
               // m_block * kBlockM + (tidx / 32) * (kBlockM / kNWarps), 16);
-            }
           } else if (!Is_even_N) {
             flash::apply_mask(scores,
                               binfo.actual_seqlen_k - n_block * kBlockN);
@@ -457,9 +455,8 @@ inline __device__ void compute_attn_1rowblock(const Params &params, const int bi
             // Idk why it's get<1> and not get<0> of the stride.
             // if (cute::thread0()) { print(idx_row.layout()); print(stride<1>(idx_row)); printf("stride = %d \n", get<1>(stride<1>(idx_row))); }
             // I can't get the stride from idx_row
-            if (Is_sparse_attn_mask) {
-              if (!enable_mask_bypass ||
-                  (m_block + 1) * kBlockM >= gSparseMaskDownMin[n_block]) {
+            if (Is_sparse_attn_mask && (!enable_mask_bypass ||
+                  (m_block + 1) * kBlockM >= gSparseMaskDownMin[n_block])) {
                 if (tidx < kBlockN) {
                   sSparseMask(tidx) = gSparseMask(tidx);
                 }
@@ -475,7 +472,6 @@ inline __device__ void compute_attn_1rowblock(const Params &params, const int bi
                     n_block * kBlockN);
                 // m_block * kBlockM + (tidx / 32) * 16, kNWarps * 16);
                 // m_block * kBlockM + (tidx / 32) * (kBlockM / kNWarps), 16);
-              }
             } else {
               flash::apply_mask_causal(
                   scores,
@@ -562,14 +558,15 @@ inline __device__ void compute_attn_1rowblock(const Params &params, const int bi
     for (; n_block >= 0; --n_block) {
         if (Is_sparse_attn_mask && enable_mask_bypass && SPARSE_MASKED(n_block)) {
             if (n_block == 0) {
-            flash::cp_async_wait<0>();
-            __syncthreads();
+                flash::cp_async_wait<0>();
+                __syncthreads();
             }
             tVgV.data() = tVgV.data() + (-int(kBlockN * params.v_row_stride));
             gSparseMask.data() = gSparseMask.data() + (-kBlockN);
             if (!Is_causal)
-            gSparseMaskUp.data() = gSparseMaskUp.data() + (-kBlockN);
-            if (Return_softmax) tPgP.data() = tPgP.data() + (-kBlockN);
+                gSparseMaskUp.data() = gSparseMaskUp.data() + (-kBlockN);
+            if (Return_softmax) 
+                tPgP.data() = tPgP.data() + (-kBlockN);
             continue;
         }
         Tensor acc_s = partition_fragment_C(tiled_mma, Shape<Int<kBlockM>, Int<kBlockN>>{});  // (MMA=4, MMA_M, MMA_N)
