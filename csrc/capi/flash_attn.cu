@@ -129,6 +129,7 @@ void set_params_fprop_strided(Flash_fwd_params &params,
                       void * attn_mask = nullptr,
                       void * attn_mask_start_row_indices = nullptr,
                       void * attn_mask_end_row_indices = nullptr,
+                      void * flashmask_maxmin_ptr = nullptr,
                       const int attn_mask_start_row = 0,
                       int mask_head_mod_size = 0,
                       int mask_seq_q_mod_size = 0) {
@@ -188,10 +189,15 @@ void set_params_fprop_strided(Flash_fwd_params &params,
     // sparse mask row index
     params.attn_mask_start_row_indices_ptr = attn_mask_start_row_indices;
     params.attn_mask_end_row_indices_ptr = attn_mask_end_row_indices;
+    params.flashmask_maxmin_ptr = static_cast<int*>(flashmask_maxmin_ptr);
     params.attn_mask_start_row = attn_mask_start_row;
+    params.enable_mask_bypass = seqlen_q >= 1024;
     if(attn_mask_start_row_indices!=nullptr||attn_mask_end_row_indices!=nullptr) {
         params.h_sparsemask = mask_head_mod_size;
         params.h_h_sparsemask_ratio = h / mask_head_mod_size;
+        if (params.enable_mask_bypass){
+            ASSERT_CHECK(params.flashmask_maxmin_ptr != nullptr);
+        }
     }
 
     // Set the different scale values.
@@ -466,6 +472,7 @@ void set_params_dgrad_strided(Flash_bwd_params &params,
                       void * attn_mask = nullptr,
                       void * attn_mask_start_row_indices = nullptr,
                       void * attn_mask_end_row_indices = nullptr,
+                      void * flashmask_maxmin_ptr = nullptr,
                       const int attn_mask_start_row = 0,
                       int mask_head_mod_size = 0,
                       int mask_seq_q_mod_size = 0) {
@@ -490,6 +497,7 @@ void set_params_dgrad_strided(Flash_bwd_params &params,
                      attn_mask,
                      attn_mask_start_row_indices,
                      attn_mask_end_row_indices,
+                     flashmask_maxmin_ptr,
                      attn_mask_start_row,
                      mask_head_mod_size,
                      mask_seq_q_mod_size);
@@ -565,6 +573,7 @@ bool flash_attn_fwd(const void * const q,
                     const void * const attn_mask_start_row_indices,
                     const int64_t * const attn_mask_start_row_indices_dims,
                     const void * const attn_mask_end_row_indices,
+                    const void * const flashmask_maxmin_ptr,
                     const int attn_mask_start_row,
                     const int q_row_stride,
                     const int k_row_stride,
@@ -621,6 +630,7 @@ bool flash_attn_fwd(const void * const q,
                      const_cast<void *>(attn_mask),
                      const_cast<void *>(attn_mask_start_row_indices),
                      const_cast<void *>(attn_mask_end_row_indices),
+                     const_cast<void *>(flashmask_maxmin_ptr),
                      attn_mask_start_row,
                      mask_head_mod_size,
                      mask_seq_q_mod_size);
@@ -725,10 +735,11 @@ bool flash_attn_varlen_fwd(const void * const q,
                      const_cast<void *>(attn_mask),
                      nullptr,
                      nullptr,
+                     nullptr,
                      -1,
                      mask_head_mod_size,
                      mask_seq_q_mod_size
-                    );
+                                         );
     
     params.rng_state = static_cast<uint64_t*>(rng_state);
 
@@ -800,6 +811,7 @@ bool flash_attn_bwd(const void * const dout,
                     const void * const attn_mask_start_row_indices,
                     const int64_t * const attn_mask_start_row_indices_dims,
                     const void * const attn_mask_end_row_indices,
+                    const void * const flashmask_maxmin_ptr,
                     const int attn_mask_start_row,
                     const int q_row_stride,
                     const int k_row_stride,
@@ -893,6 +905,7 @@ bool flash_attn_bwd(const void * const dout,
                      const_cast<void *>(attn_mask),
                      const_cast<void *>(attn_mask_start_row_indices),
                     const_cast<void *>(attn_mask_end_row_indices),
+                     const_cast<void *>(flashmask_maxmin_ptr),
                      attn_mask_start_row,
                      mask_head_mod_size,
                      mask_seq_q_mod_size);
@@ -1038,6 +1051,7 @@ bool flash_attn_varlen_bwd(const void * const dout,
                      varlen_padded_input,
                      num_splits,
                      const_cast<void *>(attn_mask),
+                     nullptr,
                      nullptr,
                      nullptr,
                      -1,

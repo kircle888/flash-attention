@@ -65,7 +65,7 @@ void run_flash_bwd_seqk_parallel(Flash_bwd_params &params, cudaStream_t stream, 
     const bool is_deterministic = params.num_splits == 1;
     // printf("smem_size_dq_dk_dv = %d\n", smem_size_dq_dk_dv);
     params.attn_mask_start_row = (int)(params.attn_mask_start_row / Kernel_traits::kBlockM) * Kernel_traits::kBlockM;
-    int *nblock_sparsemask = prepare_sparsemask<Kernel_traits>(params, stream);
+    prepare_sparsemask<Kernel_traits>(params, stream);
     BOOL_SWITCH(params.is_causal, IsCausalConst, [&] {
         BOOL_SWITCH(is_even_MN, IsEvenMNConst, [&] {
             BOOL_SWITCH(is_even_K, IsEvenKConst, [&] {
@@ -84,9 +84,6 @@ void run_flash_bwd_seqk_parallel(Flash_bwd_params &params, cudaStream_t stream, 
             });
         });
     });
-    if (nblock_sparsemask != nullptr) {
-      cudaFreeAsync(nblock_sparsemask, stream);
-    }
     auto kernel_dq = &flash_bwd_convert_dq_kernel<Kernel_traits>;
     if (Kernel_traits::kSmemdQSize >= 48 * 1024)  {
         C10_CUDA_CHECK(cudaFuncSetAttribute(

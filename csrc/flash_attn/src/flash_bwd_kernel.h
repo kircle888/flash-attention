@@ -475,7 +475,9 @@ inline __device__ void compute_dq_dk_dv_1colblock(const Params &params, const in
 
     int m_block_max = cute::ceil_div(binfo.actual_seqlen_q, kBlockM);
     int attn_mask_end_row = 0;
-    if (Is_sparse_attn_mask) {
+    const bool enable_mask_bypass = params.enable_mask_bypass;
+
+    if (Is_sparse_attn_mask && enable_mask_bypass) {
       m_block_max = min(m_block_max,
                         cute::ceil_div(gSparseMaskDownMax[n_block], kBlockM));
       attn_mask_start_row = gSparseMaskDownMin[n_block];
@@ -714,7 +716,7 @@ inline __device__ void compute_dq_dk_dv_1colblock(const Params &params, const in
 
     int m_block = m_block_max - 1;
     int m_block_min = !Is_causal ? 0 : (n_block * kBlockN) / kBlockM;
-    if (!Is_causal && Is_sparse_attn_mask) {
+    if (!Is_causal && Is_sparse_attn_mask && enable_mask_bypass) {
       m_block_min = max(m_block_min, gSparseMaskUpMin[n_block] / kBlockM);
     }
 
