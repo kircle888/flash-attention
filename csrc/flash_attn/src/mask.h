@@ -55,9 +55,9 @@ void scanMaxMinGpu(
 }
 
 template <typename Kernel_traits>
-int *prepare_sparsemask(Flash_fwd_params &params, cudaStream_t stream) {
+void prepare_sparsemask(Flash_fwd_params &params, cudaStream_t stream) {
   if (!params.enable_mask_bypass) {
-    return nullptr;
+    return;
   }
   if (params.attn_mask_start_row_indices_ptr == nullptr &&
       params.attn_mask_end_row_indices_ptr == nullptr) {
@@ -65,13 +65,12 @@ int *prepare_sparsemask(Flash_fwd_params &params, cudaStream_t stream) {
     params.attn_sparsemask_down_nblockmin = nullptr;
     params.attn_sparsemask_up_nblockmax = nullptr;
     params.attn_sparsemask_up_nblockmin = nullptr;
-    return nullptr;
+    return;
   }
-  int *nblock_smask;
+  int *nblock_smask = params.flashmask_maxmin_ptr;
   constexpr int kBlockN = Kernel_traits::kBlockN;
   const int nblock_seqlen = (params.seqlen_k + kBlockN - 1) / kBlockN;
   const int nblock_masklen = params.b * params.h_sparsemask * nblock_seqlen;
-  cudaMallocAsync(&nblock_smask, 4 * sizeof(int) * nblock_masklen, stream);
   params.attn_sparsemask_down_nblockmax = nblock_smask;
   params.attn_sparsemask_down_nblockmin = nblock_smask + nblock_masklen;
   params.attn_sparsemask_up_nblockmax = nblock_smask + 2 * nblock_masklen;
@@ -100,5 +99,4 @@ int *prepare_sparsemask(Flash_fwd_params &params, cudaStream_t stream) {
     params.attn_sparsemask_up_nblockmax = nullptr;
     params.attn_sparsemask_up_nblockmin = nullptr;
   }
-  return nblock_smask;
 }

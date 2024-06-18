@@ -111,6 +111,7 @@ struct Flash_fwd_params : public Qkv_params {
     bool varlen_padded_input = false;
     void * __restrict__ attn_mask_start_row_indices_ptr;
     void * __restrict__ attn_mask_end_row_indices_ptr;
+    int *__restrict__ flashmask_maxmin_ptr = nullptr;
     int *__restrict__ attn_sparsemask_up_nblockmax = nullptr;
     int *__restrict__ attn_sparsemask_up_nblockmin = nullptr;
     int *__restrict__ attn_sparsemask_down_nblockmax = nullptr;

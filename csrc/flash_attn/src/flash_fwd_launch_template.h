@@ -37,7 +37,7 @@ void run_flash_fwd(Flash_fwd_params &params, cudaStream_t stream) {
     const bool is_attn_mask = params.attn_mask_ptr != nullptr;
     const bool is_equal_qk = (params.cu_seqlens_q == nullptr) && (params.cu_seqlens_k == nullptr) && (params.seqlen_q == params.seqlen_k) && (Is_causal) && (!is_attn_mask);
     params.attn_mask_start_row = (int)(params.attn_mask_start_row / Kernel_traits::kBlockM) * Kernel_traits::kBlockM;
-    int* nblock_sparsemask = prepare_sparsemask<Kernel_traits>(params,stream);
+    prepare_sparsemask<Kernel_traits>(params,stream);
     BOOL_SWITCH(is_even_N, IsEvenNConst, [&] {
         BOOL_SWITCH(is_even_K, IsEvenKConst, [&] {
             BOOL_SWITCH(return_softmax, ReturnSoftmaxConst, [&] {
@@ -61,9 +61,6 @@ void run_flash_fwd(Flash_fwd_params &params, cudaStream_t stream) {
             });
         });
     });
-    if (nblock_sparsemask != nullptr) {
-      cudaFreeAsync(nblock_sparsemask, stream);
-    }
 }
 
 template<typename T>
