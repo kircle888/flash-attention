@@ -59,44 +59,67 @@ void prepare_sparsemask(Flash_fwd_params &params, cudaStream_t stream) {
   if (!params.enable_mask_bypass) {
     return;
   }
-  if (params.attn_mask_start_row_indices_ptr == nullptr &&
-      params.attn_mask_end_row_indices_ptr == nullptr) {
-    params.attn_sparsemask_down_nblockmax = nullptr;
-    params.attn_sparsemask_down_nblockmin = nullptr;
-    params.attn_sparsemask_up_nblockmax = nullptr;
-    params.attn_sparsemask_up_nblockmin = nullptr;
+  if (params.flashmask_downstart_ptr == nullptr &&
+      params.flashmask_upend_ptr == nullptr) {
     return;
   }
   int *nblock_smask = params.flashmask_maxmin_ptr;
   constexpr int kBlockN = Kernel_traits::kBlockN;
   const int nblock_seqlen = (params.seqlen_k + kBlockN - 1) / kBlockN;
   const int nblock_masklen = params.b * params.h_sparsemask * nblock_seqlen;
-  params.attn_sparsemask_down_nblockmax = nblock_smask;
-  params.attn_sparsemask_down_nblockmin = nblock_smask + nblock_masklen;
-  params.attn_sparsemask_up_nblockmax = nblock_smask + 2 * nblock_masklen;
-  params.attn_sparsemask_up_nblockmin = nblock_smask + 3 * nblock_masklen;
-  if (params.attn_mask_start_row_indices_ptr != nullptr) {
+  params.flashmask_downstart_nblockmax = nblock_smask;
+  params.flashmask_downstart_nblockmin = nblock_smask + nblock_masklen;
+  params.flashmask_upend_nblockmax = nblock_smask + 2 * nblock_masklen;
+  params.flashmask_upend_nblockmin = nblock_smask + 3 * nblock_masklen;
+  params.flashmask_downend_nblockmax = nblock_smask + 4 * nblock_masklen;
+  params.flashmask_downend_nblockmin = nblock_smask + 5 * nblock_masklen;
+  params.flashmask_upstart_nblockmax = nblock_smask + 6 * nblock_masklen;
+  params.flashmask_upstart_nblockmin = nblock_smask + 7 * nblock_masklen;
+  if (params.flashmask_downstart_nblockmax != nullptr) {
     scanMaxMinGpu<kBlockN>(
-        static_cast<const int *>(params.attn_mask_start_row_indices_ptr),
+        static_cast<const int *>(params.flashmask_downstart_ptr),
         params.b * params.h_sparsemask,
         params.seqlen_k,
-        params.attn_sparsemask_down_nblockmax,
-        params.attn_sparsemask_down_nblockmin,
+        params.flashmask_downstart_nblockmax,
+        params.flashmask_downstart_nblockmin,
         stream);
   } else {
-    params.attn_sparsemask_down_nblockmax = nullptr;
-    params.attn_sparsemask_down_nblockmin = nullptr;
+    params.flashmask_downstart_nblockmax = nullptr;
+    params.flashmask_downstart_nblockmin = nullptr;
   }
-  if (params.attn_mask_end_row_indices_ptr != nullptr) {
+  if (params.flashmask_upend_ptr != nullptr) {
+    scanMaxMinGpu<kBlockN>(static_cast<const int *>(params.flashmask_upend_ptr),
+                           params.b * params.h_sparsemask,
+                           params.seqlen_k,
+                           params.flashmask_upend_nblockmax,
+                           params.flashmask_upend_nblockmin,
+                           stream);
+  } else {
+    params.flashmask_upend_nblockmax = nullptr;
+    params.flashmask_upend_nblockmin = nullptr;
+  }
+  if (params.flashmask_downend_ptr != nullptr) {
     scanMaxMinGpu<kBlockN>(
-        static_cast<const int *>(params.attn_mask_end_row_indices_ptr),
+        static_cast<const int *>(params.flashmask_downend_ptr),
         params.b * params.h_sparsemask,
         params.seqlen_k,
-        params.attn_sparsemask_up_nblockmax,
-        params.attn_sparsemask_up_nblockmin,
+        params.flashmask_downend_nblockmax,
+        params.flashmask_downend_nblockmin,
         stream);
   } else {
-    params.attn_sparsemask_up_nblockmax = nullptr;
-    params.attn_sparsemask_up_nblockmin = nullptr;
+    params.flashmask_downend_nblockmax = nullptr;
+    params.flashmask_downend_nblockmin = nullptr;
+  }
+  if (params.flashmask_upstart_ptr != nullptr) {
+    scanMaxMinGpu<kBlockN>(
+        static_cast<const int *>(params.flashmask_upstart_ptr),
+        params.b * params.h_sparsemask,
+        params.seqlen_k,
+        params.flashmask_upstart_nblockmax,
+        params.flashmask_upstart_nblockmin,
+        stream);
+  } else {
+    params.flashmask_upstart_nblockmax = nullptr;
+    params.flashmask_upstart_nblockmin = nullptr;
   }
 }

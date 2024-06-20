@@ -121,8 +121,7 @@ inline __device__ void write_softmax_to_gmem(
 template<typename Kernel_traits, bool Is_dropout, bool Is_causal, bool Is_even_N, bool Is_even_K, bool Return_softmax, bool Is_attn_mask, bool Is_equal_seq_qk, typename Params>
 inline __device__ void compute_attn_1rowblock(const Params &params, const int bidb, const int bidh, const int m_block) {
 
-    const bool Is_sparse_attn_mask = params.attn_mask_start_row_indices_ptr != nullptr;
-    const int attn_mask_start_row = params.attn_mask_start_row;
+    const bool Is_sparse_attn_mask = params.flashmask_downstart_ptr != nullptr;
 
     using Element = typename Kernel_traits::Element;
     using ElementAccum = typename Kernel_traits::ElementAccum;
@@ -202,14 +201,14 @@ inline __device__ void compute_attn_1rowblock(const Params &params, const int bi
                                Shape<Int<kBlockM>, Int<kBlockN>>{},
                                make_stride(params.seqlen_k, _1{}));
 
-    Tensor gSparseMask = make_tensor(make_gmem_ptr(reinterpret_cast<int32_t *>(params.attn_mask_start_row_indices_ptr) + row_offset_sparse_mask),
+    Tensor gSparseMask = make_tensor(make_gmem_ptr(reinterpret_cast<int32_t *>(params.flashmask_downstart_ptr) + row_offset_sparse_mask),
                                Shape<Int<kBlockN>>{});
-    Tensor gSparseMaskUp = make_tensor(make_gmem_ptr(reinterpret_cast<int32_t *>(params.attn_mask_end_row_indices_ptr) + row_offset_sparse_mask),
+    Tensor gSparseMaskUp = make_tensor(make_gmem_ptr(reinterpret_cast<int32_t *>(params.flashmask_upend_ptr) + row_offset_sparse_mask),
                                Shape<Int<kBlockN>>{});
-    const int* gSparseMaskDownMax = reinterpret_cast<int32_t*>(params.attn_sparsemask_down_nblockmax) + row_offset_sparsemask_nblock;
-    const int* gSparseMaskDownMin = reinterpret_cast<int32_t*>(params.attn_sparsemask_down_nblockmin) + row_offset_sparsemask_nblock;
-    const int* gSparseMaskUpMax = reinterpret_cast<int32_t*>(params.attn_sparsemask_up_nblockmax) + row_offset_sparsemask_nblock;
-    const int* gSparseMaskUpMin = reinterpret_cast<int32_t*>(params.attn_sparsemask_up_nblockmin) + row_offset_sparsemask_nblock;
+    const int* gSparseMaskDownMax = reinterpret_cast<int32_t*>(params.flashmask_downstart_nblockmax) + row_offset_sparsemask_nblock;
+    const int* gSparseMaskDownMin = reinterpret_cast<int32_t*>(params.flashmask_downstart_nblockmin) + row_offset_sparsemask_nblock;
+    const int* gSparseMaskUpMax = reinterpret_cast<int32_t*>(params.flashmask_upend_nblockmax) + row_offset_sparsemask_nblock;
+    const int* gSparseMaskUpMin = reinterpret_cast<int32_t*>(params.flashmask_upend_nblockmin) + row_offset_sparsemask_nblock;
     const bool enable_mask_bypass = params.enable_mask_bypass;
 
     Tensor sQ = make_tensor(make_smem_ptr(reinterpret_cast<Element *>(smem_)),
