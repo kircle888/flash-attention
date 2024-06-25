@@ -428,7 +428,7 @@ template<typename Kernel_traits, bool Is_dropout, bool Is_causal, bool Is_even_M
 inline __device__ void compute_dq_dk_dv_1colblock(const Params &params, const int bidb, const int bidh, const int n_block) {
 
     const bool Is_sparse_attn_mask = params.flashmask_downstart_ptr != nullptr;
-    int flashmask_startrow = params.seqlen_q;
+    int flashmask_startrow = 0;
 
     using Element = typename Kernel_traits::Element;
     using ElementAccum = typename Kernel_traits::ElementAccum;
@@ -474,7 +474,7 @@ inline __device__ void compute_dq_dk_dv_1colblock(const Params &params, const in
         row_offset_sparsemask_nblock;
 
     int m_block_max = cute::ceil_div(binfo.actual_seqlen_q, kBlockM);
-    int flashmask_endrow = 0;
+    int flashmask_endrow = params.seqlen_q;
     const bool enable_mask_bypass = params.enable_mask_bypass;
 
     if (Is_sparse_attn_mask && enable_mask_bypass) {
