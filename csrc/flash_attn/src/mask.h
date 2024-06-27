@@ -1,4 +1,6 @@
 #include <cuda_runtime.h>
+#include <cstdio>
+#include <cstdlib>
 template <int N>
 __global__ void scanMaxMinKernel(
     const int *input, int b, int n, int *maxo, int *mino) {
@@ -75,7 +77,7 @@ void prepare_sparsemask(Flash_fwd_params &params, cudaStream_t stream) {
   params.flashmask_downend_nblockmin = nblock_smask + 5 * nblock_masklen;
   params.flashmask_upstart_nblockmax = nblock_smask + 6 * nblock_masklen;
   params.flashmask_upstart_nblockmin = nblock_smask + 7 * nblock_masklen;
-  if (params.flashmask_downstart_nblockmax != nullptr) {
+  if (params.flashmask_downstart_ptr != nullptr) {
     scanMaxMinGpu<kBlockN>(
         static_cast<const int *>(params.flashmask_downstart_ptr),
         params.b * params.h_sparsemask,

@@ -428,7 +428,7 @@ template<typename Kernel_traits, bool Is_dropout, bool Is_causal, bool Is_even_M
 inline __device__ void compute_dq_dk_dv_1colblock(const Params &params, const int bidb, const int bidh, const int n_block) {
 
     const bool Is_sparse_attn_mask = params.flashmask_downstart_ptr != nullptr;
-    int flashmask_startrow = params.seqlen_q;
+    int flashmask_startrow = 0;
 
     using Element = typename Kernel_traits::Element;
     using ElementAccum = typename Kernel_traits::ElementAccum;
@@ -437,6 +437,7 @@ inline __device__ void compute_dq_dk_dv_1colblock(const Params &params, const in
     // Shared memory.
     __shared__ int32_t sparse_mask_smem_[Kernel_traits::kBlockN];
     __shared__ int32_t sparse_mask_smem_up[Kernel_traits::kBlockN];
+    __shared__ int32_t sparse_mask_smem_downend[Kernel_traits::kBlockN];
     extern __shared__ char smem_[];
 
     // The thread index.
@@ -459,7 +460,8 @@ inline __device__ void compute_dq_dk_dv_1colblock(const Params &params, const in
     const int n_residue = params.seqlen_k % kBlockN ? params.seqlen_k % kBlockN : kBlockN;
 
     const index_t row_offset_sparsemask_nblock =
-        (bidb * params.h_sparsemask + bidh / params.h_h_sparsemask_ratio) * cute::ceil_div(params.seqlen_k, kBlockN);
+        (bidb * params.h_sparsemask + bidh / params.h_h_sparsemask_ratio) *
+        cute::ceil_div(params.seqlen_k, kBlockN);
     const int *gSparseMaskDownMax =
         reinterpret_cast<int32_t *>(params.flashmask_downstart_nblockmax) +
         row_offset_sparsemask_nblock;
@@ -472,16 +474,33 @@ inline __device__ void compute_dq_dk_dv_1colblock(const Params &params, const in
     const int *gSparseMaskUpMin =
         reinterpret_cast<int32_t *>(params.flashmask_upend_nblockmin) +
         row_offset_sparsemask_nblock;
+    const int *gSparseMaskDownEndMax =
+        reinterpret_cast<int32_t *>(params.flashmask_downend_nblockmax) +
+        row_offset_sparsemask_nblock;
+    const int *gSparseMaskDownEndMin =
+        reinterpret_cast<int32_t *>(params.flashmask_downend_nblockmin) +
+        row_offset_sparsemask_nblock;
 
     int m_block_max = cute::ceil_div(binfo.actual_seqlen_q, kBlockM);
-    int flashmask_endrow = 0;
+    const bool flashmask_has_end = params.flashmask_downend_ptr != nullptr;
+    int flashmask_upendrow = params.seqlen_q;
+
     const bool enable_mask_bypass = params.enable_mask_bypass;
 
     if (Is_sparse_attn_mask && enable_mask_bypass) {
       m_block_max = min(m_block_max,
                         cute::ceil_div(gSparseMaskDownMax[n_block], kBlockM));
+    /*
+      flashmask_has_end && enable_mask_bypass is not support now
+      if (flashmask_has_end) {
+        if(flashmask_bwd_state == 1){
+            m_block_max = cute::ceil_div(binfo.actual_seqlen_q, kBlockM);
+        }
+      }
+    */
       flashmask_startrow = gSparseMaskDownMin[n_block];
-      flashmask_endrow = gSparseMaskUpMax[n_block];
+      if (params.flashmask_upend_ptr != nullptr)
+        flashmask_upendrow = gSparseMaskUpMax[n_block];
     }
     const int n_block_max = cute::ceil_div(binfo.actual_seqlen_k, kBlockN);
 
@@ -543,6 +562,8 @@ inline __device__ void compute_dq_dk_dv_1colblock(const Params &params, const in
                                Shape<Int<kBlockN>>{});
     Tensor gSparseMaskUp = make_tensor(make_gmem_ptr(reinterpret_cast<int32_t *>(params.flashmask_upend_ptr) + row_offset_sparse_mask),
                                Shape<Int<kBlockN>>{});
+    Tensor gSparseMaskDownEnd = make_tensor(make_gmem_ptr(reinterpret_cast<int32_t *>(params.flashmask_downend_ptr) + row_offset_sparse_mask),
+                               Shape<Int<kBlockN>>{});
 
     Tensor sQ = make_tensor(make_smem_ptr(reinterpret_cast<Element *>(smem_)),
                             typename Kernel_traits::SmemLayoutQdO{});
@@ -568,6 +589,7 @@ inline __device__ void compute_dq_dk_dv_1colblock(const Params &params, const in
     Tensor sdQ = make_tensor(sP.data(), typename Kernel_traits::SmemLayoutdQ{});
     Tensor sSparseMask = make_tensor(make_smem_ptr(reinterpret_cast<int32_t *>(sparse_mask_smem_)), Shape<Int<kBlockN>>{});
     Tensor sSparseMaskUp = make_tensor(make_smem_ptr(reinterpret_cast<int32_t *>(sparse_mask_smem_up)), Shape<Int<kBlockN>>{});
+    Tensor sSparseMaskDownEnd = make_tensor(make_smem_ptr(reinterpret_cast<int32_t *>(sparse_mask_smem_downend)), Shape<Int<kBlockN>>{});
     Tensor sdPsum = make_tensor(make_smem_ptr(reinterpret_cast<float2 *>((sP.data() + cute::max(size(sP), size(sdQ))).get())),
                                 Shape<Int<Kernel_traits::kSmemdPsumCount / 2>>{});
 
@@ -716,9 +738,29 @@ inline __device__ void compute_dq_dk_dv_1colblock(const Params &params, const in
 
     int m_block = m_block_max - 1;
     int m_block_min = !Is_causal ? 0 : (n_block * kBlockN) / kBlockM;
-    if (!Is_causal && Is_sparse_attn_mask && enable_mask_bypass) {
-      m_block_min = max(m_block_min, gSparseMaskUpMin[n_block] / kBlockM);
+    if(Is_sparse_attn_mask  && enable_mask_bypass){
+      if (!Is_causal) {
+        m_block_min = max(m_block_min, gSparseMaskUpMin[n_block] / kBlockM);
+      }
+      /*
+      if (flashmask_has_end){
+        if(flashmask_bwd_state == 1){
+            m_block_min = gSparseMaskDownEndMin[n_block] / kBlockM;
+            m_block_min =
+                max(m_block_min,
+                    min(cute::ceil_div(binfo.actual_seqlen_q, kBlockM),
+                        cute::ceil_div(gSparseMaskDownMax[n_block], kBlockM)));
+        }
+      }
+      */
     }
+
+    /*
+    if(flashmask_has_end && flashmask_bwd_state == 1 && m_block < m_block_min){
+        return;
+        // do nothing because stage0 has done them.
+    }
+    */
 
     // We might need to exit early and write 0 to dK and dV.
     // Otherwise we get wrong result for the case where we don't enter the for loop.
@@ -841,6 +883,8 @@ inline __device__ void compute_dq_dk_dv_1colblock(const Params &params, const in
 	        sSparseMask(tidx) = gSparseMask(tidx);
             if(!Is_causal)
                 sSparseMaskUp(tidx) = gSparseMaskUp(tidx);
+            if(flashmask_has_end)
+                sSparseMaskDownEnd(tidx) = gSparseMaskDownEnd(tidx);
         }
 	    __syncthreads();
     }
@@ -890,7 +934,7 @@ inline __device__ void compute_dq_dk_dv_1colblock(const Params &params, const in
         }
         if (!Is_causal) {
             if (Is_sparse_attn_mask && 
-                ((m_block + 1) * kBlockM >= flashmask_startrow || m_block * kBlockM < flashmask_endrow)){
+                ((m_block + 1) * kBlockM >= flashmask_startrow || m_block * kBlockM < flashmask_upendrow)){
                 flash::apply_sparse_mask(scores, sSparseMask, sSparseMaskUp, n_block * kBlockN + (tidx / 32 / AtomLayoutMS) * MMA_N_SdP * 16, binfo.actual_seqlen_k,
                                          m_block * kBlockM + get<0>(taccScS_row(0)),
                                          AtomLayoutMS * 16, n_block * kBlockN);
@@ -904,16 +948,42 @@ inline __device__ void compute_dq_dk_dv_1colblock(const Params &params, const in
             // (e.g., 256 and 2), the 2nd block of seqlen_q (from 128 to 255), we're not doing causal masking.
             // But we still want to mask out elements not beyond actual_seqlen_k.
 
-            if (Is_sparse_attn_mask && (m_block + 1) * kBlockM >= flashmask_startrow) {
-                flash::apply_sparse_mask_causal(scores, sSparseMask, n_block * kBlockN + (tidx / 32 / AtomLayoutMS) * MMA_N_SdP * 16, binfo.actual_seqlen_k,
-                                         m_block * kBlockM + get<0>(taccScS_row(0)),
-                                         AtomLayoutMS * 16, n_block * kBlockN);
-            } else if (m_block * kBlockM < (n_block + 1) * kBlockN
-                || (!Is_even_MN && (n_block + 1) * kBlockN >= binfo.actual_seqlen_k)) {
-                flash::apply_mask_causal(scores, n_block * kBlockN + (tidx / 32 / AtomLayoutMS) * MMA_N_SdP * 16,
-                                         binfo.actual_seqlen_k, m_block * kBlockM + get<0>(taccScS_row(0)),
-                                         // binfo.actual_seqlen_k, m_block * kBlockM + (tidx / 32) % AtomLayoutMS * 16 + (tidx % 32) / 4,
-                                         AtomLayoutMS * 16);
+            if (Is_sparse_attn_mask &&
+                (m_block + 1) * kBlockM >= flashmask_startrow) {
+              if (flashmask_has_end)
+                flash::apply_sparse_mask_causal_withend(
+                    scores,
+                    sSparseMask,
+                    sSparseMaskDownEnd,
+                    n_block * kBlockN +
+                        (tidx / 32 / AtomLayoutMS) * MMA_N_SdP * 16,
+                    binfo.actual_seqlen_k,
+                    m_block * kBlockM + get<0>(taccScS_row(0)),
+                    AtomLayoutMS * 16,
+                    n_block * kBlockN);
+              else {
+                flash::apply_sparse_mask_causal(
+                    scores,
+                    sSparseMask,
+                    n_block * kBlockN +
+                        (tidx / 32 / AtomLayoutMS) * MMA_N_SdP * 16,
+                    binfo.actual_seqlen_k,
+                    m_block * kBlockM + get<0>(taccScS_row(0)),
+                    AtomLayoutMS * 16,
+                    n_block * kBlockN);
+              }
+            } else if (m_block * kBlockM < (n_block + 1) * kBlockN ||
+                       (!Is_even_MN &&
+                        (n_block + 1) * kBlockN >= binfo.actual_seqlen_k)) {
+              flash::apply_mask_causal(
+                  scores,
+                  n_block * kBlockN +
+                      (tidx / 32 / AtomLayoutMS) * MMA_N_SdP * 16,
+                  binfo.actual_seqlen_k,
+                  m_block * kBlockM + get<0>(taccScS_row(0)),
+                  // binfo.actual_seqlen_k, m_block * kBlockM + (tidx / 32) %
+                  // AtomLayoutMS * 16 + (tidx % 32) / 4,
+                  AtomLayoutMS * 16);
             }
         }
         // if (cute::thread(32, 0)) { print(scores); }
@@ -1648,7 +1718,7 @@ inline __device__ void compute_dq_dk_dv_seqk_parallel(const Params &params) {
         int loop_step_x = 0;
         for(int i = 0; i < params.seqlen_k; i+= kBlockN) {
            compute_dq_dk_dv_1colblock<Kernel_traits, Is_dropout, Is_causal, Is_even_MN, Is_even_K, false, false, Is_attn_mask, /*Seq_parallel=*/true>(params, bidb, bidh, loop_step_x);
-           loop_step_x += 1;
+            loop_step_x += 1;
         }
     } else {
         compute_dq_dk_dv_1colblock<Kernel_traits, Is_dropout, Is_causal, Is_even_MN, Is_even_K, false, false, Is_attn_mask, /*Seq_parallel=*/true>(params, bidb, bidh, n_block);
