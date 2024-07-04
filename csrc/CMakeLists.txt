@@ -47,6 +47,39 @@ set(FA2_SOURCES_CU
      flash_attn/src/flash_bwd_hdim256_bf16_sm80.cu
   )
 
+# Remove fwd hdim32, hdim64, hdim256, because a compiler bug in cuda 12.3
+if(CMAKE_CUDA_COMPILER_VERSION VERSION_EQUAL "12.3")
+  set(FA2_SOURCES_CU
+      flash_attn/src/cuda_utils.cu
+      flash_attn/src/flash_fwd_hdim96_fp16_sm80.cu
+      flash_attn/src/flash_fwd_hdim96_bf16_sm80.cu
+      flash_attn/src/flash_fwd_hdim128_fp16_sm80.cu
+      flash_attn/src/flash_fwd_hdim128_bf16_sm80.cu
+      flash_attn/src/flash_fwd_hdim160_fp16_sm80.cu
+      flash_attn/src/flash_fwd_hdim160_bf16_sm80.cu
+      flash_attn/src/flash_fwd_hdim192_fp16_sm80.cu
+      flash_attn/src/flash_fwd_hdim192_bf16_sm80.cu
+      flash_attn/src/flash_fwd_hdim224_fp16_sm80.cu
+      flash_attn/src/flash_fwd_hdim224_bf16_sm80.cu
+      flash_attn/src/flash_fwd_hdim256_fp16_sm80.cu
+      flash_attn/src/flash_fwd_hdim256_bf16_sm80.cu
+      flash_attn/src/flash_bwd_hdim32_fp16_sm80.cu
+      flash_attn/src/flash_bwd_hdim32_bf16_sm80.cu
+      flash_attn/src/flash_bwd_hdim64_fp16_sm80.cu
+      flash_attn/src/flash_bwd_hdim64_bf16_sm80.cu
+      flash_attn/src/flash_bwd_hdim96_fp16_sm80.cu
+      flash_attn/src/flash_bwd_hdim96_bf16_sm80.cu
+      flash_attn/src/flash_bwd_hdim128_fp16_sm80.cu
+      flash_attn/src/flash_bwd_hdim128_bf16_sm80.cu
+      flash_attn/src/flash_bwd_hdim160_fp16_sm80.cu
+      flash_attn/src/flash_bwd_hdim160_bf16_sm80.cu
+      flash_attn/src/flash_bwd_hdim192_fp16_sm80.cu
+      flash_attn/src/flash_bwd_hdim192_bf16_sm80.cu
+      flash_attn/src/flash_bwd_hdim224_fp16_sm80.cu
+      flash_attn/src/flash_bwd_hdim224_bf16_sm80.cu
+    )
+endif()
+
 add_library(flashattn SHARED
     capi/flash_attn.cu
     ${FA2_SOURCES_CU}
