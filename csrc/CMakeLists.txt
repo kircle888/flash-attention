@@ -47,8 +47,11 @@ set(FA2_SOURCES_CU
      flash_attn/src/flash_bwd_hdim256_bf16_sm80.cu
   )
 
+string(REGEX MATCH "([0-9]+)\\.([0-9]+)\\." VERSION_MATCH "${CMAKE_CUDA_COMPILER_VERSION}")
+set(CUDA_MAJOR_VERSION ${CMAKE_MATCH_1})
+set(CUDA_MINOR_VERSION ${CMAKE_MATCH_2})
 # Remove fwd hdim32, hdim64, hdim256, because a compiler bug in cuda 12.3
-if(CMAKE_CUDA_COMPILER_VERSION VERSION_EQUAL "12.3")
+if(CUDA_MAJOR_VERSION STREQUAL "12" AND CUDA_MINOR_VERSION STREQUAL "3")
   set(FA2_SOURCES_CU
       flash_attn/src/cuda_utils.cu
       flash_attn/src/flash_fwd_hdim96_fp16_sm80.cu
