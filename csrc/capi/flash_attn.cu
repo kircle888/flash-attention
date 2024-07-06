@@ -526,11 +526,19 @@ void set_params_dgrad_strided(Flash_bwd_params &params,
 }
 
 void run_mha_fwd(Flash_fwd_params &params, cudaStream_t stream) {
-    FP16_SWITCH(!params.is_bf16, [&] {
-        FWD_HEADDIM_SWITCH(params.d, [&] {
-            run_mha_fwd_<elem_type, kHeadDim>(params, stream);
+    if constexpr (CUDA_VERSION == 12030){
+        FP16_SWITCH(!params.is_bf16, [&] {
+            FWD_HEADDIM_SWITCH_FOR_CUDA12030(params.d, [&] {
+                run_mha_fwd_<elem_type, kHeadDim>(params, stream);
+            }); 
         });
-    });
+    }else{
+        FP16_SWITCH(!params.is_bf16, [&] {
+            FWD_HEADDIM_SWITCH(params.d, [&] {
+                run_mha_fwd_<elem_type, kHeadDim>(params, stream);
+            });
+        });
+    }
 }
 
 #ifdef __cplusplus
@@ -590,7 +598,7 @@ bool flash_attn_fwd(const void * const q,
     CHECK_FWD_EXECTUABLE(seqlen_q, seqlen_k)
 
     if constexpr (CUDA_VERSION == 12030){
-        if(head_size_rounded == 32 || head_size_rounded == 64 ||head_size_rounded ==256){
+        if(head_size_rounded ==256){
             throw std::runtime_error("FlashAttention compiled by cuda 12.3 can't deal with headdim in[32, 64, 256], because of a compiler bug of `ptxas`.");
         }
     }
@@ -701,6 +709,12 @@ bool flash_attn_varlen_fwd(const void * const q,
     const int mask_seq_q_mod_size = attn_mask ? mask_dims[2] : 0;
 
     CHECK_FWD_EXECTUABLE(max_seqlen_q, max_seqlen_k)
+    if constexpr (CUDA_VERSION == 12030){
+        if(head_size_rounded ==256){
+            throw std::runtime_error("FlashAttention compiled by cuda 12.3 can't deal with headdim in[32, 64, 256], because of a compiler bug of `ptxas`.");
+        }
+    }
+    
     Flash_fwd_params params;
     set_params_fprop_strided(params,
                      batch_size,
