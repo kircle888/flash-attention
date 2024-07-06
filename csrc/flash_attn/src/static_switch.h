@@ -65,7 +65,7 @@
     }                                      \
   }()
 
-#define FWD_HEADDIM_SWITCH_FOR_CU12030(HEADDIM, ...)   \
+#define FWD_HEADDIM_SWITCH_FOR_CUDA12030(HEADDIM, ...)   \
   [&] {                                    \
     if (HEADDIM <= 96) {            \
       constexpr static int kHeadDim = 96;  \
