@@ -597,12 +597,6 @@ bool flash_attn_fwd(const void * const q,
 
     CHECK_FWD_EXECTUABLE(seqlen_q, seqlen_k)
 
-    if constexpr (CUDA_VERSION == 12030){
-        if(head_size_rounded ==256){
-            throw std::runtime_error("FlashAttention compiled by cuda 12.3 can't deal with headdim in[32, 64, 256], because of a compiler bug of `ptxas`.");
-        }
-    }
-
     Flash_fwd_params params;
     set_params_fprop_strided(params,
                      batch_size,
