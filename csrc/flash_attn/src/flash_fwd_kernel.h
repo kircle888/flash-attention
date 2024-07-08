@@ -425,7 +425,7 @@ inline __device__ void compute_attn_1rowblock(const Params &params, const int bi
         // for rows outside actual_seqlen_k. So those rows could have Inf / NaN, and the matmul
         // can produce Inf / NaN.
         if (!Is_causal) {
-          if (Is_sparse_attn_mask && (!enable_mask_bypass ||
+          if (!Is_attn_mask && Is_sparse_attn_mask && (!enable_mask_bypass ||
                 (m_block + 1) * kBlockM >= gSparseMaskDownMin[n_block] ||
                 m_block * kBlockM < gSparseMaskUpMax[n_block])) {
               if (tidx < kBlockN) {
@@ -461,7 +461,7 @@ inline __device__ void compute_attn_1rowblock(const Params &params, const int bi
             // Idk why it's get<1> and not get<0> of the stride.
             // if (cute::thread0()) { print(idx_row.layout()); print(stride<1>(idx_row)); printf("stride = %d \n", get<1>(stride<1>(idx_row))); }
             // I can't get the stride from idx_row
-            if (Is_sparse_attn_mask && (!enable_mask_bypass ||
+            if (!Is_attn_mask && Is_sparse_attn_mask && (!enable_mask_bypass ||
                   (m_block + 1) * kBlockM >= gSparseMaskDownMin[n_block])) {
                 if (tidx < kBlockN) {
                   sSparseMask(tidx) = gSparseMask(tidx);
@@ -506,7 +506,7 @@ inline __device__ void compute_attn_1rowblock(const Params &params, const int bi
             }
         }
 
-        if (Is_sparse_attn_mask){
+        if (!Is_attn_mask && Is_sparse_attn_mask){
             gSparseMask.data() = gSparseMask.data() + (-kBlockN);
             if(flashmask_has_end){
                 gSparseMaskDownEnd.data() = gSparseMaskDownEnd.data() + (-kBlockN);
@@ -580,7 +580,7 @@ inline __device__ void compute_attn_1rowblock(const Params &params, const int bi
 
     // These are the iterations where we don't need masking on S
     for (; n_block >= 0; --n_block) {
-        if (Is_sparse_attn_mask && enable_mask_bypass && SPARSE_MASKED(n_block)) {
+        if (!Is_attn_mask && Is_sparse_attn_mask && enable_mask_bypass && SPARSE_MASKED(n_block)) {
             if (n_block == 0) {
                 flash::cp_async_wait<0>();
                 __syncthreads();
@@ -637,7 +637,7 @@ inline __device__ void compute_attn_1rowblock(const Params &params, const int bi
                                                             params.unscale_softmax);
             tPgMask.data() = tPgMask.data() + (-kBlockN);
         }
-        if (!Is_causal && Is_sparse_attn_mask &&
+        if (!Is_attn_mask && !Is_causal && Is_sparse_attn_mask &&
             (!enable_mask_bypass ||
              (m_block + 1) * kBlockM >= gSparseMaskDownMin[n_block] ||
              m_block * kBlockM < gSparseMaskUpMax[n_block])) {
@@ -658,7 +658,7 @@ inline __device__ void compute_attn_1rowblock(const Params &params, const int bi
               n_block * kBlockN);
           // m_block * kBlockM + (tidx / 32) * 16, kNWarps * 16);
           // m_block * kBlockM + (tidx / 32) * (kBlockM / kNWarps), 16);
-        } else if (Is_causal && Is_sparse_attn_mask &&
+        } else if (!Is_attn_mask && Is_causal && Is_sparse_attn_mask &&
                    (!enable_mask_bypass ||
                     (m_block + 1) * kBlockM >= gSparseMaskDownMin[n_block])) {
           if (tidx < kBlockN) {
@@ -693,7 +693,7 @@ inline __device__ void compute_attn_1rowblock(const Params &params, const int bi
           // m_block * kBlockM + (tidx / 32) * (kBlockM / kNWarps), 16);
         }
 
-        if (Is_sparse_attn_mask) {
+        if (!Is_attn_mask && Is_sparse_attn_mask) {
           gSparseMask.data() = gSparseMask.data() + (-kBlockN);
           if(flashmask_has_end){
             gSparseMaskDownEnd.data() = gSparseMaskDownEnd.data() + (-kBlockN);
