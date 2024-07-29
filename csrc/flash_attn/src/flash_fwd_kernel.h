@@ -386,7 +386,7 @@ inline __device__ void compute_attn_1rowblock(const Params &params, const int bi
 #define SPARSE_MASKED_DOWN(N_BLOCK) \
     (((m_block * kBlockM) >= gSparseMaskDownMax[(N_BLOCK)]) && (!flashmask_has_end || (m_block + 1) * kBlockM < gSparseMaskDownEndMin[(N_BLOCK)]))
 #define SPARSE_MASKED_UP(N_BLOCK) \
-    (!Is_causal && (m_block + 1) * kBlockM < gSparseMaskUpMin[(N_BLOCK)] && (!flashmask_has_end || m_block * kBlockM >= gSparseMaskUpStartMin[(N_BLOCK)]))
+    (!Is_causal && (m_block + 1) * kBlockM < gSparseMaskUpMin[(N_BLOCK)] && (!flashmask_has_end || m_block * kBlockM >= gSparseMaskUpStartMax[(N_BLOCK)]))
 #define SPARSE_MASKED(N_BLOCK) \
     (SPARSE_MASKED_DOWN(N_BLOCK) || SPARSE_MASKED_UP(N_BLOCK))
     constexpr int n_masking_steps = Is_causal ? cute::ceil_div(kBlockM, kBlockN) : 1;
