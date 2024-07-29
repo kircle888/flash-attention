@@ -287,7 +287,7 @@ inline __device__ void apply_sparse_mask(Tensor<Engine, Layout> &tensor, Tensor<
     }
 }
 
-template <typename Engine, typename Layout, typename Engine1, typename Layout1,>
+template <typename Engine, typename Layout, typename Engine1, typename Layout1>
 inline __device__ void apply_sparse_mask_withend(Tensor<Engine, Layout> &tensor, Tensor<Engine1, Layout1> &flashmask_downstart, Tensor<Engine1, Layout1> &flashmask_downend, Tensor<Engine1, Layout1> &flashmask_upend, Tensor<Engine1, Layout1> &flashmask_upstart, const uint32_t col_idx_offset_,
                                          const uint32_t max_seqlen_k, const uint32_t row_idx_offset_,
                                          const uint32_t warp_row_stride, const uint32_t mask_col_idx_offset) {
